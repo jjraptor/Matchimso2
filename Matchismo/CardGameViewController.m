@@ -15,14 +15,9 @@
 @property (weak, nonatomic) IBOutlet UILabel *flipsLabel;
 @property (nonatomic) int flipCount;
 @property (nonatomic) BOOL cardHasBeenFlipped;
-@property (strong, nonatomic) IBOutletCollection(UIButton) NSArray *cardButtons;
-@property (strong, nonatomic) CardMatchingGame *game;
 @property (weak, nonatomic) IBOutlet UILabel *scoreLabel;
 @property (strong, nonatomic) NSString *resultsString;
 @property (weak, nonatomic) IBOutlet UILabel *resultsLabel;
-@property (nonatomic) NSUInteger matchMode;
-@property (weak, nonatomic) IBOutlet UISwitch *modeSwitch;
-@property (weak, nonatomic) IBOutlet UILabel *modeSwitchLabel;
 @property (strong, nonatomic) NSMutableArray *playHistory;
 @property (weak, nonatomic) IBOutlet UISlider *resultsSlider;
 @property (nonatomic) NSUInteger rank;
@@ -31,12 +26,20 @@
 
 @implementation CardGameViewController
 
-- (CardMatchingGame *)game  // Lazy instantiation of game
+- (CardMatchingGame *)game
 {
-    if (!_game) _game = [[CardMatchingGame alloc] initWithCardCount:self.cardButtons.count
-                                                          usingDeck:[[PlayingCardDeck alloc] init]];
+    if (!_game) {
+        _game = [[CardMatchingGame alloc] initWithCardCount:self.cardButtons.count usingDeck:[self createDeck]usingOptions:[self gameOptions]];
+    }
     return _game;
 }
+
+- (Deck *)createDeck
+{
+    //Abstract method
+    return nil;
+}
+
 
 - (NSMutableArray *)playHistory
 {
@@ -61,24 +64,55 @@
  return _resultsString;
  }
 
+# pragma mark Abstact Methods
+
+- (void)updateCardButton:(UIButton *)cardButton
+{
+    /* Abstract method to set card back image if used
+       and select the appropriate highlighting
+    */
+}
+
+- (NSAttributedString *)cardAttributedContents:(Card *)card forFaceUp:(BOOL)isFaceUp
+{
+    // Abstract method to obtain the contents of a card as an AttributedString
+    return nil;
+}
+
+- (NSString *)textForSingleCard
+{
+    // Abstract method to obtain the contents of single card
+    return nil;
+}
+
+- (NSAttributedString *)obtainCardsMatched
+{
+    // Abstract method to get the list of cards matched seperated by a space
+    return nil;
+}
+
+- (NSDictionary *)gameOptions
+{
+    // Abstract method to set game options
+    return nil;
+}
+
 - (void)updateUI
 {
     for (UIButton *cardButton in self.cardButtons) {
         Card *card = [self.game cardAtIndex:[self.cardButtons indexOfObject:cardButton]];
-        [cardButton setTitle:card.contents forState:UIControlStateSelected];
-        [cardButton setTitle:card.contents forState:UIControlStateSelected | UIControlStateDisabled];
+        [cardButton setAttributedTitle:[self cardAttributedContents:card forFaceUp:NO] forState:UIControlStateNormal];
+        [cardButton setAttributedTitle:[self cardAttributedContents:card forFaceUp:YES] forState:UIControlStateSelected];
+        [cardButton setAttributedTitle:[self cardAttributedContents:card forFaceUp:YES] forState:UIControlStateSelected|UIControlStateDisabled];
         cardButton.selected = card.isFaceUp;
         cardButton.enabled = !card.isUnplayable;
-        cardButton.alpha = card.isUnplayable ? 0.3 : 1.0;
-        // Set card back to UIImage
-        if (!cardButton.isSelected) [cardButton setImage:[UIImage imageNamed:@"Penquin.jpg"] forState:UIControlStateNormal];
-        else [cardButton setImage:nil forState:UIControlStateNormal];
+        [self updateCardButton:cardButton];
     }
     self.scoreLabel.text = [NSString stringWithFormat:@"Score: %d", self.game.score];
     self.resultsLabel.alpha = 1.0;
     [self updateResultsString];
     self.resultsSlider.maximumValue = self.flipCount+0.9;
-    //self.resultsLabel.text = [NSString stringWithFormat:@"%@", self.resultsString];
+    //[self.flipHistorySlider setValue:self.flipCount animated:YES];
 }
 
 - (void)setFlipCount:(int)flipCount
@@ -89,41 +123,17 @@
 
 - (IBAction)flipCard:(UIButton *)sender
 {
-    [self.game flipCardAtIndex:[self.cardButtons indexOfObject:sender] forMatchMode:(NSInteger)self.matchMode];
+    [self.game flipCardAtIndex:[self.cardButtons indexOfObject:sender]];
     self.flipCount++;
-    if (!self.cardHasBeenFlipped) {
-        self.cardHasBeenFlipped = YES;
-        self.modeSwitch.enabled = NO;
-        self.modeSwitch.hidden = YES;
-        self.modeSwitchLabel.hidden = YES;
-        self.resultsSlider.hidden = NO;
-    }
     [self updateUI];
 }
 
 - (IBAction)dealNewDeck:(UIButton *)sender
 {
-    self.game = [[CardMatchingGame alloc] initWithCardCount:self.cardButtons.count
-                                                  usingDeck:[[PlayingCardDeck alloc] init]];
-    [self updateUI];
+    self.game = nil;
     self.flipCount = 0;
-    self.cardHasBeenFlipped = NO;
-    self.modeSwitch.enabled = YES;
-    self.modeSwitch.hidden = NO;
-    self.modeSwitchLabel.hidden = NO;
-    self.resultsSlider.hidden = YES;
-    
-    self.resultsLabel.text = [NSString stringWithFormat:@"New Game"];
-}
-
-- (IBAction)toggleMatchMode:(UISwitch *)sender
-{
-    if (sender.on) {
-        self.matchMode = 3;
-    } else {
-        self.matchMode = 2;
-    }
-}
+    self.playHistory = nil;
+    [self updateUI];}
 
 - (NSString *)textForCardFlip
 {
@@ -143,12 +153,16 @@
                 text = [NSString stringWithFormat:@"match! %d points bonus",self.game.lastMatchScore];
             }
         } else
-            text = [self textForCardFlip];
-        self.resultsLabel.text = text;
-        [self.playHistory addObject:text];
+            text = [self textForSingleCard];
+        
+        NSMutableAttributedString *textToDisplay = [[NSMutableAttributedString alloc] initWithAttributedString:[self obtainCardsMatched]];
+        [textToDisplay appendAttributedString:[[NSAttributedString alloc] initWithString:text]];
+        self.resultsLabel.attributedText = textToDisplay;
+        [self.playHistory addObject:textToDisplay];
     } else
-        self.resultsLabel.text = [[NSString alloc] initWithFormat:@"Play!"];
+        self.resultsLabel.attributedText = [[NSAttributedString alloc] initWithString:@"Play!"];
 }
+
 
 - (IBAction)browsePlayHistory:(UISlider *)sender
 {
@@ -164,12 +178,7 @@
 
 - (void)viewDidLoad
 {
-    self.resultsSlider.hidden = YES;
-    if (self.modeSwitch.on) {
-        self.matchMode = 3;
-    } else {
-        self.matchMode = 2;
-    }
+    
 }
 
 

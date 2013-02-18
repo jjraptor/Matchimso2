@@ -10,4 +10,8 @@
 
 @interface SetCard : Card
 
+@property (nonatomic) NSUInteger symbol, numberOfSymbols, shadingOfSymbols, colorOfSymbols; // 1..3
+
++ (NSArray *)validSymbols;
+
 @end

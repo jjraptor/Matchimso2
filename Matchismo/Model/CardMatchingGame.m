@@ -15,6 +15,7 @@
 @property (readwrite, nonatomic) int score; 
 @property (readwrite, nonatomic) int lastMatchScore;
 @property (readwrite, strong, nonatomic) NSArray *lastMatchCards;
+//@property (nonatomic) int matchSize;
 @end
 
 @implementation CardMatchingGame
@@ -25,12 +26,36 @@
     return _cards;
 }
 
+#define FLIP_COST 1
+#define MISMATCH_PENALTY 2
+#define MATCH_BONUS 4
+#define NUMBER_OF_MATCHES 2
+
+- (int) numberOfMatches
+{
+    if (!_numberOfMatches) _numberOfMatches = NUMBER_OF_MATCHES;
+    return _numberOfMatches;
+}
+
+- (int) matchBonus
+{
+    if (!_matchBonus) _matchBonus = MATCH_BONUS;
+    return _matchBonus;
+}
+
+- (int) matchPenalty
+{
+    if (!_matchPenalty) _matchPenalty = MISMATCH_PENALTY;
+    return _matchPenalty;
+}
+
 // Designated initializer
-- (id)initWithCardCount:(NSUInteger)cardCount usingDeck:(Deck *)deck
+- (id)initWithCardCount:(NSUInteger)cardCount usingDeck:(Deck *)deck usingOptions:(NSDictionary *)options
 {
     self = [super init];
     
     if (self) {
+        self.numberOfMatches = 2;
         for (int i = 0; i < cardCount; i++) {
             Card *card = [deck drawRandomCard];
             if (!card) {
@@ -40,6 +65,11 @@
             }
         }
     }
+    if (options) {
+        self.numberOfMatches = [options[NUMBER_OF_MATCHES_KEY] intValue];
+        self.matchBonus = [options[MATCH_BONUS_KEY] intValue];
+        self.matchPenalty = [options[MISMATCH_PENALTY_KEY] intValue];
+    }
     return self;
 }
 
@@ -48,46 +78,36 @@
     return (index < self.cards.count) ? self.cards[index] : nil;
 }
 
-#define MATCH_BONUS 4
-#define MISMATCH_PENALTY 2
-#define FLIP_COST 1
-
-- (void)flipCardAtIndex:(NSUInteger)index forMatchMode:(NSInteger)mode
+- (void)flipCardAtIndex:(NSUInteger)index
 {
     Card *card = [self cardAtIndex:index];
-    
     if (!card.isUnplayable) {
         self.lastMatchCards = @[card];
         if (!card.isFaceUp) {
             self.lastMatchScore = 0;
             NSMutableArray *otherCards = [[NSMutableArray alloc] init];
             
-            // see if flipping this card creates a match
-            for (Card *otherCard in self.cards) {
+            for (Card *otherCard in self.cards)
                 if (otherCard.isFaceUp && !otherCard.isUnplayable) {
-                    // if found add to array of cards to match
                     [otherCards addObject:otherCard];
-                }
-                if ([otherCards count] == mode -1){
-                    // Do we have cards?
-                    if (otherCards.count) {
-                        int matchScore = [card match:@[otherCard]];
+                    if (otherCards.count == self.numberOfMatches-1) {
+                        int matchScore = [card match:otherCards];
                         self.lastMatchCards = [self.lastMatchCards arrayByAddingObjectsFromArray:otherCards];
+                        
                         if (matchScore) {
+                            for (Card *otherCard in otherCards)
+                                otherCard.unplayable = YES;
                             card.unplayable = YES;
-                            for (Card *card in otherCards) {
-                                card.unplayable = YES;
-                            }
-                            self.lastMatchScore += matchScore * MATCH_BONUS;
+                            self.lastMatchScore = matchScore * self.matchBonus;
                         } else {
-                            otherCard.faceUp = NO;
-                            self.lastMatchScore = -MISMATCH_PENALTY;
+                            for (Card *otherCard in otherCards) {
+                                otherCard.faceUp = NO;
+                            }
+                            self.lastMatchScore = -self.matchPenalty;
                         }
-                        break;
                     }
                 }
-            }
-            self.score = self.lastMatchScore -= FLIP_COST;
+            self.score += self.lastMatchScore - FLIP_COST;
         }
         card.faceUp = !card.isFaceUp;
     }
